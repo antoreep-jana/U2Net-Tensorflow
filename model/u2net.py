@@ -12,10 +12,10 @@ class REBNCONV(tf.keras.Model):
 		self.bn_s1 = BatchNormalization()
 		self.relu_s1 = ReLU()
 
-	def call(self,x):
+	def call(self,x, training = False):
 
 		hx = x
-		xout = self.relu_s1(self.bn_s1(self.conv_s1(hx)))
+		xout = self.relu_s1(self.bn_s1(self.conv_s1(hx), training = training))
 
 		return xout
 
@@ -24,25 +24,16 @@ def _upsample_like(src,tar):
 
 	#src = F.upsample(src,size=tar.shape[2:],mode='bilinear')
 
-	h_factor = tar.shape[0]/src.shape[0]
-	w_factor = tar.shape[1]/src.shape[1]
+	h_factor = tar.shape[1]/src.shape[1]
+	print("H Factor", h_factor)
+	w_factor = tar.shape[2]/src.shape[2]
+	print("W Factor", w_factor)
 
-	src = UpSampling2D(size = (h_factor, w_factor), mode = 'bilinear')(src)
+	#src = UpSampling2D(size = (h_factor, w_factor), interpolation = 'bilinear')(src)
+	#out = UpSampling2D(size = tf.convert_to_tensor([h_factor, w_factor]), interpolation = 'bilinear')(src)
+	out = UpSampling2D(size = (int(h_factor), int(w_factor)), interpolation = 'bilinear')(src)
 
-	return src
-
-
-class MaxPool2DP(tf.keras.layers.Layer):
-
-	def __init__(self,):
-		pass
-
-	def build(self, ):
-		pass 
-
-	def call(self, inputs):
-		pass 
-
+	return out
 
 ### RSU-7 ###
 #class RSU7(nn.Module):#UNet07DRES(nn.Module):
@@ -114,28 +105,38 @@ class RSU7(tf.keras.Model):
 
 		hx7 = self.rebnconv7(hx6)
 
+		print("hxin.shape", hxin.shape)
 		#hx6d =  self.rebnconv6d(torch.cat((hx7,hx6),1))
-		hx6d = self.rebnconv6d(tf.concat([hx7, hx6], 1))
+		hx6d = self.rebnconv6d(tf.concat([hx7, hx6], -1))
+		#print(hx6d.shape)
+		#print('----' * 10,"\n", hx5.shape)
 		hx6dup = _upsample_like(hx6d,hx5)
+		print("hx6dup.shape", hx6dup.shape)
 
 		#hx5d =  self.rebnconv5d(torch.cat((hx6dup,hx5),1))
-		hx5d = self.rebnconv5d(tf.concat([hx6up, hx5], 1))
+		hx5d = self.rebnconv5d(tf.concat([hx6dup, hx5], -1))
 		hx5dup = _upsample_like(hx5d,hx4)
+		print("hx5dup.shape", hx5dup.shape)
 
 		#hx4d = self.rebnconv4d(torch.cat((hx5dup,hx4),1))
-		hx4d = self.rebnconv4d(tf.concat([hx5dup, hx4], 1))
+		hx4d = self.rebnconv4d(tf.concat([hx5dup, hx4], -1))
 		hx4dup = _upsample_like(hx4d,hx3)
+		print("hx4dup.shape", hx4dup.shape)
 
 		#hx3d = self.rebnconv3d(torch.cat((hx4dup,hx3),1))
-		hx3d = self.rebnconv3d(tf.concat([hx4dup, hx3], 1))
+		hx3d = self.rebnconv3d(tf.concat([hx4dup, hx3], -1))
 		hx3dup = _upsample_like(hx3d,hx2)
+		print("hx3dup.shape", hx3dup.shape)
 
 		#hx2d = self.rebnconv2d(torch.cat((hx3dup,hx2),1))
-		hx2d = self.rebnconv2d(tf.concat([hx3dup, hx2], 1))
+		hx2d = self.rebnconv2d(tf.concat([hx3dup, hx2], -1))
 		hx2dup = _upsample_like(hx2d,hx1)
-
+		print("hx2dup.shape", hx2dup.shape)
+		print("hx1.shape", hx1.shape)
+		
 		#hx1d = self.rebnconv1d(torch.cat((hx2dup,hx1),1))
-		hx1d = self.rebnconv1d(tf.concat([hx2dup, hx1], 1))
+		hx1d = self.rebnconv1d(tf.concat([hx2dup, hx1], -1))
+		print("hx1d.shape", hx1d.shape)
 
 		return hx1d + hxin
 
@@ -150,15 +151,19 @@ class RSU6(tf.keras.Model):
 
 		self.rebnconv1 = REBNCONV(out_ch,mid_ch,dirate=1)
 		#self.pool1 = nn.MaxPool2d(2,stride=2)#,ceil_mode=True)
+		self.pool1 = MaxPool2D(2, strides = 2)
 
 		self.rebnconv2 = REBNCONV(mid_ch,mid_ch,dirate=1)
 		#self.pool2 = nn.MaxPool2d(2,stride=2)#,ceil_mode=True)
+		self.pool2 = MaxPool2D(2, strides = 2)
 
 		self.rebnconv3 = REBNCONV(mid_ch,mid_ch,dirate=1)
 		#self.pool3 = nn.MaxPool2d(2,stride=2)#,ceil_mode=True)
+		self.pool3 = MaxPool2D(2, strides = 2)
 
 		self.rebnconv4 = REBNCONV(mid_ch,mid_ch,dirate=1)
 		#self.pool4 = nn.MaxPool2d(2,stride=2)#,ceil_mode=True)
+		self.pool4 = MaxPool2D(2, strides = 2)
 
 		self.rebnconv5 = REBNCONV(mid_ch,mid_ch,dirate=1)
 
@@ -194,23 +199,23 @@ class RSU6(tf.keras.Model):
 
 
 		#hx5d =  self.rebnconv5d(torch.cat((hx6,hx5),1))
-		hx5d = self.rebnconv5d(tf.concat([hx6, hx5], 1))
+		hx5d = self.rebnconv5d(tf.concat([hx6, hx5], -1))
 		hx5dup = _upsample_like(hx5d,hx4)
 
 		#hx4d = self.rebnconv4d(torch.cat((hx5dup,hx4),1))
-		hx4d = self.rebnconv4d(tf.concat([hx5dup, hx4], 1))
+		hx4d = self.rebnconv4d(tf.concat([hx5dup, hx4], -1))
 		hx4dup = _upsample_like(hx4d,hx3)
 
 		#hx3d = self.rebnconv3d(torch.cat((hx4dup,hx3),1))
-		hx3d = self.rebnconv3d(tf.concat([hx4dup, hx3], 1))
+		hx3d = self.rebnconv3d(tf.concat([hx4dup, hx3], -1))
 		hx3dup = _upsample_like(hx3d,hx2)
 
 		#hx2d = self.rebnconv2d(torch.cat((hx3dup,hx2),1))
-		hx2d = self.rebnconv2d(tf.concat([hx3dup, hx2], 1))
+		hx2d = self.rebnconv2d(tf.concat([hx3dup, hx2], -1))
 		hx2dup = _upsample_like(hx2d,hx1)
 
 		#hx1d = self.rebnconv1d(torch.cat((hx2dup,hx1),1))
-		hx1d = self.rebnconv1d(tf.concat([hx2dup, hx1], 1))
+		hx1d = self.rebnconv1d(tf.concat([hx2dup, hx1], -1))
 
 		return hx1d + hxin
 
@@ -266,19 +271,19 @@ class RSU5(tf.keras.Model):
 		hx5 = self.rebnconv5(hx4)
 
 		#hx4d = self.rebnconv4d(torch.cat((hx5,hx4),1))
-		hx4d = self.rebnconv4d(tf.concat([hx5, hx4], 1))
+		hx4d = self.rebnconv4d(tf.concat([hx5, hx4], -1))
 		hx4dup = _upsample_like(hx4d,hx3)
 
 		#hx3d = self.rebnconv3d(torch.cat((hx4dup,hx3),1))
-		hx3d = self.rebnconv3d(tf.concat([hx4dup, hx3], 1))
+		hx3d = self.rebnconv3d(tf.concat([hx4dup, hx3], -1))
 		hx3dup = _upsample_like(hx3d,hx2)
 
 		#hx2d = self.rebnconv2d(torch.cat((hx3dup,hx2),1))
-		hx2d = self.rebnconv2d(tf.concat([hx3dup, hx2], 1))
+		hx2d = self.rebnconv2d(tf.concat([hx3dup, hx2], -1))
 		hx2dup = _upsample_like(hx2d,hx1)
 
 		#hx1d = self.rebnconv1d(torch.cat((hx2dup,hx1),1))
-		hx1d = self.rebnconv1d(tf.concat([hx2dup, hx1], 1))
+		hx1d = self.rebnconv1d(tf.concat([hx2dup, hx1], -1))
 
 		return hx1d + hxin
 
@@ -307,7 +312,7 @@ class RSU4(tf.keras.Model):
 		self.rebnconv2d = REBNCONV(mid_ch*2,mid_ch,dirate=1)
 		self.rebnconv1d = REBNCONV(mid_ch*2,out_ch,dirate=1)
 
-	def forward(self,x):
+	def call(self,x):
 
 		hx = x
 
@@ -324,15 +329,15 @@ class RSU4(tf.keras.Model):
 		hx4 = self.rebnconv4(hx3)
 
 		#hx3d = self.rebnconv3d(torch.cat((hx4,hx3),1))
-		hx3d = self.rebnconv3d(tf.concat([hx4, hx3], 1))
+		hx3d = self.rebnconv3d(tf.concat([hx4, hx3], -1))
 		hx3dup = _upsample_like(hx3d,hx2)
 
 		#hx2d = self.rebnconv2d(torch.cat((hx3dup,hx2),1))
-		hx2d = self.rebnconv2d(tf.concat([hx3dup, hx2], 1))
+		hx2d = self.rebnconv2d(tf.concat([hx3dup, hx2], -1))
 		hx2dup = _upsample_like(hx2d,hx1)
 
 		#hx1d = self.rebnconv1d(torch.cat((hx2dup,hx1),1))
-		hx1d = self.rebnconv1d(tf.concat([hx2dup, hx1], 1))
+		hx1d = self.rebnconv1d(tf.concat([hx2dup, hx1], -1))
 
 		return hx1d + hxin
 
@@ -355,7 +360,7 @@ class RSU4F(tf.keras.Model):
 		self.rebnconv2d = REBNCONV(mid_ch*2,mid_ch,dirate=2)
 		self.rebnconv1d = REBNCONV(mid_ch*2,out_ch,dirate=1)
 
-	def forward(self,x):
+	def call(self,x):
 
 		hx = x
 
@@ -368,25 +373,43 @@ class RSU4F(tf.keras.Model):
 		hx4 = self.rebnconv4(hx3)
 
 		#hx3d = self.rebnconv3d(torch.cat((hx4,hx3),1))
-		hx3d = self.rebnconv3d(tf.concat([hx4, hx3], 1))
+		hx3d = self.rebnconv3d(tf.concat([hx4, hx3], -1))
 		#hx2d = self.rebnconv2d(torch.cat((hx3d,hx2),1))
-		hx2d = self.rebnconv2d(tf.concat([hx3d, hx2], 1))
+		hx2d = self.rebnconv2d(tf.concat([hx3d, hx2], -1))
 		#hx1d = self.rebnconv1d(torch.cat((hx2d,hx1),1))
-		hx1d = self.rebnconv1d(tf.concat([hx2d, hx1], 1))
+		hx1d = self.rebnconv1d(tf.concat([hx2d, hx1], -1))
 
 		return hx1d + hxin
 
 
 class Conv2D_P(tf.keras.layers.Layer):
 
-	def __init__(self):
-		pass 
-
-	def build(self, ):
-		pass
+	def __init__(self, filters, kernel_size, strides = 1, padding = 'valid', **kwargs):
+		super(Conv2D_P, self).__init__(**kwargs)
+		self.conv = tf.keras.layers.Conv2D(
+			filters = filters, 
+			kernel_size = kernel_size, 
+			strides = strides, 
+			padding = padding
+			)
 
 	def call(self, inputs):
-		pass
+		return self.conv(inputs)
+
+
+
+class MaxPool2DP(tf.keras.layers.Layer):
+
+	def __init__(self, pool_size = 2, strides = 2, padding = 'valid', **kwargs):
+		super(MaxPool2DP, self).__init__(**kwargs)
+		self.pool = tf.keras.layers.MaxPooling2D(
+			pool_size = pool_size, 
+			strides = strides, 
+			padding = padding)
+
+	def call(self, inputs):
+		return self.pool(inputs)
+
 
 ##### U^2-Net ####
 #class U2NET(nn.Module):
@@ -421,12 +444,15 @@ class U2NET(tf.keras.Model):
 
 		#self.side1 = nn.Conv2d(64,out_ch,3,padding=1)
 		self.side1 = Conv2D(out_ch, 3, padding = 'same')
+		#self.side1 = Conv2D_P(out_ch, 3, padding = 'same')
+
 		# self.side2 = nn.Conv2d(64,out_ch,3,padding=1)
 		# self.side3 = nn.Conv2d(128,out_ch,3,padding=1)
 		# self.side4 = nn.Conv2d(256,out_ch,3,padding=1)
 		# self.side5 = nn.Conv2d(512,out_ch,3,padding=1)
 		# self.side6 = nn.Conv2d(512,out_ch,3,padding=1)
 		self.side2 = Conv2D(out_ch, 3, padding = 'same')
+		#self.side2 = Conv2D_P()
 		self.side3 = Conv2D(out_ch, 3, padding = 'same')
 		self.side4 = Conv2D(out_ch, 3, padding = 'same')
 		self.side5 = Conv2D(out_ch, 3, padding = 'same')
@@ -465,23 +491,23 @@ class U2NET(tf.keras.Model):
 
 		#-------------------- decoder --------------------
 		#hx5d = self.stage5d(torch.cat((hx6up,hx5),1))
-		hx5d = self.stage5d(tf.concat([hx6up, hx5], 1))
+		hx5d = self.stage5d(tf.concat([hx6up, hx5], -1))
 		hx5dup = _upsample_like(hx5d,hx4)
 
 		#hx4d = self.stage4d(torch.cat((hx5dup,hx4),1))
-		hx4d = self.stage4d(tf.concat([hx5dup, hx4], 1))
+		hx4d = self.stage4d(tf.concat([hx5dup, hx4], -1))
 		hx4dup = _upsample_like(hx4d,hx3)
 
 		#hx3d = self.stage3d(torch.cat((hx4dup,hx3),1))
-		hx3d = self.stage3d(tf.concat([hx4dup, hx3], 1))
+		hx3d = self.stage3d(tf.concat([hx4dup, hx3], -1))
 		hx3dup = _upsample_like(hx3d,hx2)
 
 		#hx2d = self.stage2d(torch.cat((hx3dup,hx2),1))
-		hx2d = self.stage2d(tf.concat([hx3dup, hx2], 1))
+		hx2d = self.stage2d(tf.concat([hx3dup, hx2], -1))
 		hx2dup = _upsample_like(hx2d,hx1)
 
 		#hx1d = self.stage1d(torch.cat((hx2dup,hx1),1))
-		hx1d = self.stage1d(tf.concat([hx2dup, hx1], 1))
+		hx1d = self.stage1d(tf.concat([hx2dup, hx1], -1))
 
 
 		#side output
@@ -503,18 +529,51 @@ class U2NET(tf.keras.Model):
 		d6 = _upsample_like(d6,d1)
 
 		#d0 = self.outconv(torch.cat((d1,d2,d3,d4,d5,d6),1))
-		d0 = self.outconv(tf.concat([d1, d2, d3, d4, d5, d6], 1))
+		d0 = self.outconv(tf.concat([d1, d2, d3, d4, d5, d6], -1))
 
 		#return F.sigmoid(d0), F.sigmoid(d1), F.sigmoid(d2), F.sigmoid(d3), F.sigmoid(d4), F.sigmoid(d5), F.sigmoid(d6)
 		return tf.math.sigmoid(d0), tf.math.sigmoid(d1), tf.math.sigmoid(d2), tf.math.sigmoid(d3), tf.math.sigmoid(d4), tf.math.sigmoid(d5), tf.math.sigmoid(d6)
 
+	def summary(self):
+
+		x = Input(shape = (224, 224, 3))
+		return tf.keras.Model(inputs = [x], outputs = self.call(x)).summary()
 
 
+"""
 model = U2NET()
-print(model)
-model.build(input_shape=(None, 64, 64, 3))
-model.compile(loss = 'binary_crossentropy', metrics = ['accuracy'], optimizer = 'adam')
-print(model.summary())
+
+import numpy as np
+import cv2
+#print(model(np.random.rand(1, 224,224,3)))
+
+img_path = '/media/antoreep/C1/Personal Projects/Computer Vision/Image Segmentation/U2Net Tensorflow/test_data/bike.jpg'
+
+img = cv2.imread(img_path)
+img = cv2.resize(img, (224,224))
+img = img/255.0
+
+img = np.expand_dims(img, axis = 0)
+
+
+output = model.predict(img)
+
+pred = output[0]
+#print(pred.shape)
+
+import matplotlib.pyplot as plt
+
+plt.imshow(tf.squeeze(pred, axis = 0), cmap = 'gray')
+plt.show()
+
+
+"""
+
+#pred = pred.squeeze(0)
+
+#model.build(input_shape=(None, 224, 224, 3))
+#model.compile(loss = 'binary_crossentropy', metrics = ['accuracy'], optimizer = 'adam')
+#print(model.summary())
 
 """
 ### U^2-Net small ###
@@ -556,7 +615,7 @@ class U2NETP(nn.Module):
 
 		self.outconv = nn.Conv2d(6*out_ch,out_ch,1)
 
-	def forward(self,x):
+	def call(self,x):
 
 		hx = x
 
